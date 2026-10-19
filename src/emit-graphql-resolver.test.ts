@@ -3048,47 +3048,127 @@ describe("emitGraphQLResolver search filter DSL", () => {
 		const result = buildQuery(undefined, undefined, {
 			species: "cat",
 			tags: { name: "vip", noteExists: true },
-		}) as { bool: { filter: unknown[] } };
+		});
 
-		assert.ok(
-			result.bool.filter.some(
-				(c) =>
-					JSON.stringify(c) === JSON.stringify({ term: { species: "cat" } }),
-			),
-			"flat term clause missing",
-		);
-		assert.ok(
-			result.bool.filter.some(
-				(c) =>
-					JSON.stringify(c) ===
-					JSON.stringify({
-						nested: {
-							path: "tags",
-							query: {
-								bool: { filter: [{ term: { "tags.name": "vip" } }] },
-							},
-						},
-					}),
-			),
-			"nested term clause missing",
-		);
-		assert.ok(
-			result.bool.filter.some(
-				(c) =>
-					JSON.stringify(c) ===
-					JSON.stringify({
+		assert.deepEqual(result, {
+			bool: {
+				filter: [
+					{ term: { species: "cat" } },
+					{
 						nested: {
 							path: "tags",
 							query: {
 								bool: {
-									filter: [{ exists: { field: "tags.note.keyword" } }],
+									filter: [
+										{ term: { "tags.name": "vip" } },
+										{ exists: { field: "tags.note.keyword" } },
+									],
 								},
 							},
 						},
-					}),
+					},
+				],
+			},
+		});
+	});
+
+	// One SearchFilter object on a @nested array describes one array element.
+	// Wrapping each of its clauses in its own nested query let `gate: X` match
+	// one element and `validTo > now` another, so a lapsed approval beside an
+	// open one of a different gate passed an "approved today" filter.
+	it("buildQuery keeps every clause of one nested filter object inside one nested query", async () => {
+		const projection = makeProjection({
+			fields: [
+				makeField({
+					name: "tags",
+					nested: true,
+					subProjection: nestedTagSubProjection(),
+					type: {
+						kind: "Model",
+						name: "Array",
+						indexer: { value: { kind: "Model" } },
+					} as unknown as Type,
+				}),
+			],
+		});
+		const buildQuery = loadBuildQuery(
+			prepareFunctionContent(
+				await emitGraphQLResolver(projection, defaultOptions),
 			),
-			"nested exists clause missing",
 		);
+		const result = buildQuery(undefined, undefined, {
+			tags: { name: "vip", noteExists: true },
+		}) as { bool: { filter: unknown[] } };
+
+		assert.equal(result.bool.filter.length, 1, "one nested query per object");
+		assert.deepEqual(result.bool.filter[0], {
+			nested: {
+				path: "tags",
+				query: {
+					bool: {
+						filter: [
+							{ term: { "tags.name": "vip" } },
+							{ exists: { field: "tags.note.keyword" } },
+						],
+					},
+				},
+			},
+		});
+	});
+
+	it("buildQuery scores a nested match and carries the sibling term filter in the same nested query", async () => {
+		const projection = makeProjection({
+			fields: [
+				makeField({
+					name: "tags",
+					nested: true,
+					subProjection: {
+						projectionModel: { name: "TagSearchDoc" },
+						sourceModel: { name: "Tag" },
+						indexName: "tags",
+						fields: [
+							makeField({ name: "label", filterables: ["match"] }),
+							makeField({
+								name: "name",
+								keyword: true,
+								filterables: ["term"],
+							}),
+						],
+					} as unknown as ResolvedProjection,
+					type: {
+						kind: "Model",
+						name: "Array",
+						indexer: { value: { kind: "Model" } },
+					} as unknown as Type,
+				}),
+			],
+		});
+		const buildQuery = loadBuildQuery(
+			prepareFunctionContent(
+				await emitGraphQLResolver(projection, defaultOptions),
+			),
+		);
+		const result = buildQuery(undefined, undefined, {
+			tags: { labelMatch: "vip", name: "gold" },
+		});
+		assert.deepEqual(result, {
+			bool: {
+				must: [
+					{
+						nested: {
+							path: "tags",
+							score_mode: "max",
+							query: {
+								bool: {
+									must: [{ match: { "tags.label": "vip" } }],
+									filter: [{ term: { "tags.name": "gold" } }],
+								},
+							},
+						},
+					},
+				],
+			},
+		});
 	});
 
 	// Issue #110: a SearchFilter input that traverses two levels of nested

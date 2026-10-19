@@ -297,20 +297,23 @@ function applyFilterSpec(rootSpec, rootInput, rootOutMusts, rootOutFilters, root
 		if (finTail > 0) {
 			finTail = finTail - 1;
 			const item = finSlots[finTail];
-			for (const clause of item.childMusts) {
+			if (item.childMusts.length > 0) {
+				const inner = { must: item.childMusts };
+				if (item.childFilters.length > 0) {
+					inner.filter = item.childFilters;
+				}
 				item.parentMusts.push({
 					nested: {
 						path: item.path,
 						score_mode: "max",
-						query: { bool: { must: [clause] } },
+						query: { bool: inner },
 					},
 				});
-			}
-			for (const clause of item.childFilters) {
+			} else if (item.childFilters.length > 0) {
 				item.parentFilters.push({
 					nested: {
 						path: item.path,
-						query: { bool: { filter: [clause] } },
+						query: { bool: { filter: item.childFilters } },
 					},
 				});
 			}
