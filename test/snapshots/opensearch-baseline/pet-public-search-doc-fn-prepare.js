@@ -172,43 +172,46 @@ function applyFilterSpec(rootSpec, rootInput, rootOutMusts, rootOutFilters, root
 				if (node.k === "nested") {
 					const allEntries = input[node.i + "All"] || [];
 					const noneEntries = input[node.i + "None"] || [];
-					let entry = 0;
-					for (const group of [value].concat(allEntries, noneEntries)) {
-						entry = entry + 1;
-						if (group != null) {
-							const childMusts = [];
-							const childFilters = [];
-							const childMustNots = [];
-							if (procTail + 1 > procSlots.length) {
-								util.error(
-									"applyFilterSpec exceeded fixed work-slot capacity; SearchFilter too deep, or a <field>All or None list too long, for APPSYNC_JS function",
-								);
+					for (const list of [
+						{ mode: "split", groups: [value] },
+						{ mode: "all", groups: allEntries },
+						{ mode: "none", groups: noneEntries },
+					]) {
+						for (const group of list.groups) {
+							if (group != null) {
+								const childMusts = [];
+								const childFilters = [];
+								const childMustNots = [];
+								if (procTail + 1 > procSlots.length) {
+									util.error(
+										"applyFilterSpec exceeded fixed work-slot capacity; SearchFilter too deep, or a <field>All or None list too long, for APPSYNC_JS function",
+									);
+								}
+								if (finTail + 1 > finSlots.length) {
+									util.error(
+										"applyFilterSpec exceeded fixed finalize-slot capacity; SearchFilter too deep, or a <field>All or None list too long, for APPSYNC_JS function",
+									);
+								}
+								procSlots[procTail] = {
+									spec: node.c,
+									input: group,
+									outMusts: childMusts,
+									outFilters: childFilters,
+									outMustNots: childMustNots,
+								};
+								procTail = procTail + 1;
+								finSlots[finTail] = {
+									path: node.p,
+									mode: list.mode,
+									childMusts,
+									childFilters,
+									childMustNots,
+									parentMusts: outMusts,
+									parentFilters: outFilters,
+									parentMustNots: outMustNots,
+								};
+								finTail = finTail + 1;
 							}
-							if (finTail + 1 > finSlots.length) {
-								util.error(
-									"applyFilterSpec exceeded fixed finalize-slot capacity; SearchFilter too deep, or a <field>All or None list too long, for APPSYNC_JS function",
-								);
-							}
-							procSlots[procTail] = {
-								spec: node.c,
-								input: group,
-								outMusts: childMusts,
-								outFilters: childFilters,
-								outMustNots: childMustNots,
-							};
-							procTail = procTail + 1;
-							finSlots[finTail] = {
-								path: node.p,
-								grouped: entry > 1,
-								negated: entry > 1 + allEntries.length,
-								childMusts,
-								childFilters,
-								childMustNots,
-								parentMusts: outMusts,
-								parentFilters: outFilters,
-								parentMustNots: outMustNots,
-							};
-							finTail = finTail + 1;
 						}
 					}
 				} else if (node.k === "object") {
@@ -303,23 +306,17 @@ function applyFilterSpec(rootSpec, rootInput, rootOutMusts, rootOutFilters, root
 			finTail = finTail - 1;
 			const item = finSlots[finTail];
 			const path = item.path;
-			if (item.negated) {
+			if (item.mode !== "split") {
+				const negated = item.mode === "none";
+				const musts = negated ? [] : item.childMusts;
+				const filters = negated ? item.childMusts.concat(item.childFilters) : item.childFilters;
 				const b = {};
-				const clauses = item.childMusts.concat(item.childFilters);
-				if (clauses.length > 0) b.filter = clauses;
+				if (musts.length > 0) b.must = musts;
+				if (filters.length > 0) b.filter = filters;
 				if (item.childMustNots.length > 0) b.must_not = item.childMustNots;
-				if (b.filter || b.must_not) {
-					item.parentMustNots.push(NW(path, b));
-				}
-			} else if (item.grouped) {
-				const b = {};
-				if (item.childMusts.length > 0) b.must = item.childMusts;
-				if (item.childFilters.length > 0) b.filter = item.childFilters;
-				if (item.childMustNots.length > 0) b.must_not = item.childMustNots;
-				if (b.must) {
-					item.parentMusts.push(NW(path, b));
-				} else if (b.filter || b.must_not) {
-					item.parentFilters.push(NW(path, b));
+				const target = negated ? item.parentMustNots : b.must ? item.parentMusts : item.parentFilters;
+				if (b.must || b.filter || b.must_not) {
+					target.push(NW(path, b));
 				}
 			} else {
 				for (const c of item.childMusts) {

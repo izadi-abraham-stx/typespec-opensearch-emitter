@@ -352,7 +352,7 @@ With positive clauses only, one entry per clause matches like the single object:
 ] } }
 ```
 
-Inside a `None` entry a negation stays the group's `must_not`, so `{ attributeKeyNot: "strike", numberGte: 50 }` drops a document that has an element with a number of at least 50 whose key is not `strike`. A `match` clause filters instead of scoring, since a score has no meaning under a negation. An empty entry adds nothing. The single object's negation covers one clause: `attributes: { attributeKeyNot: "strike" }` drops every document with a `strike` element, whatever its number; `None` is the form for "no element matches these clauses together", such as an approval that is both on a given gate and in force.
+Inside a `None` entry a negation stays the group's `must_not`, so `{ attributeKeyNot: "strike", numberGte: 50 }` drops a document that has an element with a number of at least 50 whose key is not `strike`. A `match` clause filters instead of scoring, since a score has no meaning under a negation. An empty entry adds nothing. A `None` entry holding only negations keeps a document only when every element matches them, and a document with no elements always passes.
 
 ### Override semantics
 

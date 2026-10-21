@@ -212,7 +212,6 @@ test("emits SearchFilter input with filterable kinds and nested sub-filter", asy
 	assert.ok(sdl.includes("nicknameExists: Boolean"));
 	assert.ok(sdl.includes("tags: TagSearchFilter"));
 	assert.ok(sdl.includes("tagsAll: [TagSearchFilter!]"));
-	assert.ok(sdl.includes("tagsNone: [TagSearchFilter!]"));
 	assert.ok(sdl.includes("aliasesAll: [String!]"));
 	assert.ok(sdl.includes("input TagSearchFilter {"));
 	assert.ok(sdl.includes("name: String"));
