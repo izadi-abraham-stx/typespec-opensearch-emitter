@@ -302,12 +302,13 @@ When a field's type is a TypeSpec model (struct) — either inline (`address: Ad
 
 ### Filtering a `@nested` array
 
-A `@nested` array field adds two inputs to the parent `<Type>SearchFilter`:
+A `@nested` array field adds three inputs to the parent `<Type>SearchFilter`:
 
 ```graphql
 input InstrumentSearchFilter {
   attributes: AttributeSearchFilter
   attributesAll: [AttributeSearchFilter!]
+  attributesNone: [AttributeSearchFilter!]
 }
 ```
 
@@ -338,7 +339,20 @@ Inside an entry:
 - A `match` clause scores the group: the `nested` query goes into the parent `bool.must` with `score_mode: "max"`, its filters and negations in the same bool.
 - An empty entry adds nothing.
 
-With positive clauses only, one entry per clause matches like the single object: `attributesAll: [{ attributeKey: "strike" }, { numberGte: 50 }]` equals `attributes: { attributeKey: "strike", numberGte: 50 }`. A negation differs: the object excludes every document with a matching element, while an entry needs one element that does not match. `attributes` and `attributesAll` combine: the object's per-clause queries and the entries' grouped queries all land in the parent bool.
+With positive clauses only, one entry per clause matches like the single object: `attributesAll: [{ attributeKey: "strike" }, { numberGte: 50 }]` equals `attributes: { attributeKey: "strike", numberGte: 50 }`. A negation differs: the object excludes every document with a matching element, while an entry needs one element that does not match. `attributes`, `attributesAll` and `attributesNone` combine: the object's per-clause queries and the entries' grouped queries all land in the parent bool.
+
+**`<field>None` excludes a document that has an element matching every clause of an entry.** Each entry runs as one `nested` query in the parent `bool.must_not`, so the document passes only when no element satisfies the whole entry. `attributesNone: [{ attributeKey: "strike", numberGte: 50 }]` keeps the document above, whose `strike` element holds 20, and drops a document holding `{ attributeKey: "strike", number: 60 }`:
+
+```json
+{ "bool": { "must_not": [
+  { "nested": { "path": "attributes", "query": { "bool": { "filter": [
+    { "term": { "attributes.attributeKey": "strike" } },
+    { "range": { "attributes.number": { "gte": 50 } } }
+  ] } } } }
+] } }
+```
+
+Inside a `None` entry a negation stays the group's `must_not`, so `{ attributeKeyNot: "strike", numberGte: 50 }` drops a document that has an element with a number of at least 50 whose key is not `strike`. A `match` clause filters instead of scoring, since a score has no meaning under a negation. An empty entry adds nothing. The single object's negation covers one clause: `attributes: { attributeKeyNot: "strike" }` drops every document with a `strike` element, whatever its number; `None` is the form for "no element matches these clauses together", such as an approval that is both on a given gate and in force.
 
 ### Override semantics
 

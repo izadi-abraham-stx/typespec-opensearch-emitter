@@ -465,6 +465,7 @@ function renderSearchFilterField(
 		return [
 			[node.inputName, `${node.nestedTypeName}`],
 			[`${node.inputName}All`, `[${node.nestedTypeName}!]`],
+			[`${node.inputName}None`, `[${node.nestedTypeName}!]`],
 		];
 	}
 	if (node.kind === "object") {

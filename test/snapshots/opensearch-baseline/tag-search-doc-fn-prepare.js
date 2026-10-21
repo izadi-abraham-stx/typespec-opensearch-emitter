@@ -170,8 +170,10 @@ function applyFilterSpec(rootSpec, rootInput, rootOutMusts, rootOutFilters, root
 			for (const node of spec) {
 				const value = input[node.i];
 				if (node.k === "nested") {
+					const allEntries = input[node.i + "All"] || [];
+					const noneEntries = input[node.i + "None"] || [];
 					let entry = 0;
-					for (const group of [value].concat(input[node.i + "All"] || [])) {
+					for (const group of [value].concat(allEntries, noneEntries)) {
 						entry = entry + 1;
 						if (group != null) {
 							const childMusts = [];
@@ -179,12 +181,12 @@ function applyFilterSpec(rootSpec, rootInput, rootOutMusts, rootOutFilters, root
 							const childMustNots = [];
 							if (procTail + 1 > procSlots.length) {
 								util.error(
-									"applyFilterSpec exceeded fixed work-slot capacity; SearchFilter too deep, or a <field>All list too long, for APPSYNC_JS function",
+									"applyFilterSpec exceeded fixed work-slot capacity; SearchFilter too deep, or a <field>All or None list too long, for APPSYNC_JS function",
 								);
 							}
 							if (finTail + 1 > finSlots.length) {
 								util.error(
-									"applyFilterSpec exceeded fixed finalize-slot capacity; SearchFilter too deep, or a <field>All list too long, for APPSYNC_JS function",
+									"applyFilterSpec exceeded fixed finalize-slot capacity; SearchFilter too deep, or a <field>All or None list too long, for APPSYNC_JS function",
 								);
 							}
 							procSlots[procTail] = {
@@ -198,6 +200,7 @@ function applyFilterSpec(rootSpec, rootInput, rootOutMusts, rootOutFilters, root
 							finSlots[finTail] = {
 								path: node.p,
 								grouped: entry > 1,
+								negated: entry > 1 + allEntries.length,
 								childMusts,
 								childFilters,
 								childMustNots,
@@ -212,7 +215,7 @@ function applyFilterSpec(rootSpec, rootInput, rootOutMusts, rootOutFilters, root
 					if (value != null) {
 						if (procTail + 1 > procSlots.length) {
 							util.error(
-								"applyFilterSpec exceeded fixed work-slot capacity; SearchFilter too deep, or a <field>All list too long, for APPSYNC_JS function",
+								"applyFilterSpec exceeded fixed work-slot capacity; SearchFilter too deep, or a <field>All or None list too long, for APPSYNC_JS function",
 							);
 						}
 						procSlots[procTail] = {
@@ -300,7 +303,15 @@ function applyFilterSpec(rootSpec, rootInput, rootOutMusts, rootOutFilters, root
 			finTail = finTail - 1;
 			const item = finSlots[finTail];
 			const path = item.path;
-			if (item.grouped) {
+			if (item.negated) {
+				const b = {};
+				const clauses = item.childMusts.concat(item.childFilters);
+				if (clauses.length > 0) b.filter = clauses;
+				if (item.childMustNots.length > 0) b.must_not = item.childMustNots;
+				if (b.filter || b.must_not) {
+					item.parentMustNots.push(NW(path, b));
+				}
+			} else if (item.grouped) {
 				const b = {};
 				if (item.childMusts.length > 0) b.must = item.childMusts;
 				if (item.childFilters.length > 0) b.filter = item.childFilters;

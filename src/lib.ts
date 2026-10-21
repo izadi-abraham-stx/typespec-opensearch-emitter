@@ -184,7 +184,7 @@ export const $lib = createTypeSpecLibrary({
 		"searchfilter-input-name-collision": {
 			severity: "error",
 			messages: {
-				default: paramMessage`Two filter inputs on "${"typeName"}" are both named "${"inputName"}". A "<field>All" input generated for a @nested array or a terms_all filter takes the name of another filter input. Rename one of the fields.`,
+				default: paramMessage`Two filter inputs on "${"typeName"}" are both named "${"inputName"}". A "<field>All" or "<field>None" input generated for a @nested array or a terms_all filter takes the name of another filter input. Rename one of the fields.`,
 			},
 		},
 		"filterable-requires-kind": {

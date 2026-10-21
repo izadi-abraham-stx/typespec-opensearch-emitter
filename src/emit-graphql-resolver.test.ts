@@ -3377,6 +3377,105 @@ describe("emitGraphQLResolver search filter DSL", () => {
 		);
 	});
 
+	it("buildQuery excludes a document with an element matching every clause of a None entry", async () => {
+		const buildQuery = await attributeBuildQuery();
+		assert.deepEqual(
+			buildQuery(undefined, undefined, {
+				attributesNone: [{ attributeKey: "strike", numberGte: 50 }],
+			}),
+			{
+				bool: {
+					must_not: [nestedFilter({ filter: [strikeClause, numberClause] })],
+				},
+			},
+		);
+	});
+
+	it("buildQuery ANDs one grouped must_not per None entry", async () => {
+		const buildQuery = await attributeBuildQuery();
+		const tenor = nestedFilter({
+			filter: [{ term: { "attributes.attributeKey": "tenor" } }],
+		});
+		assert.deepEqual(
+			buildQuery(undefined, undefined, {
+				attributesNone: [
+					{ attributeKey: "strike", numberGte: 50 },
+					{ attributeKey: "tenor" },
+				],
+			}),
+			{
+				bool: {
+					must_not: [
+						tenor,
+						nestedFilter({ filter: [strikeClause, numberClause] }),
+					],
+				},
+			},
+		);
+	});
+
+	it("buildQuery keeps a negation inside a None entry as the group's must_not", async () => {
+		const buildQuery = await attributeBuildQuery();
+		assert.deepEqual(
+			buildQuery(undefined, undefined, {
+				attributesNone: [{ attributeKeyNot: "strike", numberGte: 50 }],
+			}),
+			{
+				bool: {
+					must_not: [
+						nestedFilter({ filter: [numberClause], must_not: [strikeClause] }),
+					],
+				},
+			},
+		);
+	});
+
+	it("buildQuery filters, not scores, a match inside a None entry", async () => {
+		const buildQuery = await attributeBuildQuery();
+		assert.deepEqual(
+			buildQuery(undefined, undefined, {
+				attributesNone: [{ attributeKey: "strike", labelMatch: "call" }],
+			}),
+			{
+				bool: {
+					must_not: [
+						nestedFilter({
+							filter: [{ match: { "attributes.label": "call" } }, strikeClause],
+						}),
+					],
+				},
+			},
+		);
+	});
+
+	it("buildQuery combines All and None entries on one nested field", async () => {
+		const buildQuery = await attributeBuildQuery();
+		assert.deepEqual(
+			buildQuery(undefined, undefined, {
+				attributesAll: [{ attributeKey: "tenor" }],
+				attributesNone: [{ attributeKey: "strike", numberGte: 50 }],
+			}),
+			{
+				bool: {
+					filter: [
+						nestedFilter({
+							filter: [{ term: { "attributes.attributeKey": "tenor" } }],
+						}),
+					],
+					must_not: [nestedFilter({ filter: [strikeClause, numberClause] })],
+				},
+			},
+		);
+	});
+
+	it("buildQuery skips an empty None entry", async () => {
+		const buildQuery = await attributeBuildQuery();
+		assert.deepEqual(
+			buildQuery(undefined, undefined, { attributesNone: [{}] }),
+			{ match_all: {} },
+		);
+	});
+
 	it("buildQuery skips an empty All entry", async () => {
 		const buildQuery = await attributeBuildQuery();
 		assert.deepEqual(
@@ -4656,7 +4755,7 @@ describe("emitGraphQLResolver recursive pipeline split (issue #173)", () => {
 	}
 
 	it("level 2: splits an over-cap prepare into prepare-query + prepare-aggs, both NONE, then search on OPENSEARCH", async () => {
-		const result = await emitGraphQLResolver(wideProjection(18), forcePipeline);
+		const result = await emitGraphQLResolver(wideProjection(17), forcePipeline);
 
 		assert.equal(result.mode, "pipeline");
 		assert.deepEqual(

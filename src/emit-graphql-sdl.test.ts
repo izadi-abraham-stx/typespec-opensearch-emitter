@@ -1080,6 +1080,7 @@ describe("emitGraphQLSdl SearchFilter input", () => {
 		assert.ok(result.content.includes("input PetSearchFilter {"));
 		assert.ok(result.content.includes("tags: TagSearchFilter"));
 		assert.ok(result.content.includes("tagsAll: [TagSearchFilter!]"));
+		assert.ok(result.content.includes("tagsNone: [TagSearchFilter!]"));
 		assert.ok(result.content.includes("input TagSearchFilter {"));
 		assert.ok(result.content.includes("name: String"));
 		assert.ok(result.content.includes("nameNot: String"));
